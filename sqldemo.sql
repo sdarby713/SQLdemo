@@ -86,10 +86,35 @@ UPDATE actor
 -- 5a. You cannot locate the schema of the address table. Which query would you use 
 --     to re-create it?
 
+/* Here's a query to find what schema the table is in...   */
+
 SELECT table_schema, 
          table_name
 	FROM sys.schema_table_statistics
     WHERE table_name = "address";
+    
+/*  if it truly no longer exists, use this query to re-create it...    */
+
+CREATE TABLE `address` (
+   `address_id` smallint(5) unsigned NOT NULL AUTO_INCREMENT,
+   `address` varchar(50) NOT NULL,
+   `address2` varchar(50) DEFAULT NULL,
+   `district` varchar(20) NOT NULL,
+   `city_id` smallint(5) unsigned NOT NULL,
+   `postal_code` varchar(10) DEFAULT NULL,
+   `phone` varchar(20) NOT NULL,
+   `location` geometry NOT NULL,
+   `last_update` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+   PRIMARY KEY (`address_id`),
+   KEY `idx_fk_city_id` (`city_id`),
+   SPATIAL KEY `idx_location` (`location`),
+   CONSTRAINT `fk_address_city` FOREIGN KEY (`city_id`) REFERENCES `city` (`city_id`) ON UPDATE CASCADE
+ ) ENGINE=InnoDB AUTO_INCREMENT=606 DEFAULT CHARSET=utf8;
+		
+        
+/* while you still have the tables, you can generate the above code using this query:  */
+
+show create table address;
 
 -- 6a. Use JOIN to display the first and last names, as well as the address, of 
 --     each staff member. Use the tables staff and address:
@@ -99,7 +124,7 @@ SELECT first_name, last_name, address
     JOIN address
     ON staff.address_id = address.address_id;
     
---  another way to do that:
+/*  another way to do that:  */
 
 SELECT first_name, last_name, address
 	FROM staff, address
@@ -122,7 +147,8 @@ SELECT first_name, last_name,
 -- 6c. List each film and the number of actors who are listed for that film. 
 --     Use tables film_actor and film. Use inner join.
 
-SELECT title, count(actor_id)  "Count of Actors"
+SELECT title, 
+       count(actor_id)  "Count of Actors"
 	FROM film
     JOIN film_actor
     ON film.film_id = film_actor.film_id
@@ -169,20 +195,13 @@ SELECT first_name, last_name
                     WHERE title = "Alone Trip"
 				)
 			);
-            
-SELECT s.name as Student, c.name as Course 
-FROM student s
-    INNER JOIN bridge b ON s.id = b.sid
-    INNER JOIN course c ON b.cid  = c.id 
-ORDER BY s.name ;
-    
-		
+
 
 -- 7c. You want to run an email marketing campaign in Canada, for which you will need the 
 --     names and email addresses of all Canadian customers. Use joins to retrieve this 
 --     information.
 
---  Here's my time-honored way of retrieving this using joins
+/*  Here's my time-honored way of retrieving this using joins  */
 
 SELECT first_name, last_name, email, city, country
 	FROM customer  c1,
@@ -194,7 +213,7 @@ SELECT first_name, last_name, email, city, country
         AND a1.city_id = c2.city_id
         AND c2.country_id = c3.country_id;
         
--- But if you insist on my coming up with a query that explicity uses the keyword "JOIN":
+/* But if you insist on my coming up with a query that explicity uses the keyword "JOIN":  */
 
 SELECT first_name, last_name, email, city, country
 	FROM customer  c1
@@ -224,6 +243,19 @@ SELECT title,
 
 -- 7f. Write a query to display how much business, in dollars, each store brought in.
 
+/*  I'm not sure of the best way to find this.  I can think of three different queries,  each
+	yielding a different result.  Query 1:				*/
+    
+SELECT s.store_id     "Store ID",  
+	sum(amount)		  "Gross Revenue"
+FROM store  s
+INNER JOIN inventory i 	on s.store_id = i.store_id
+INNER JOIN rental r     on i.inventory_id = r.inventory_id
+RIGHT JOIN payment p    on r.rental_id = p.rental_id
+GROUP BY s.store_id;
+
+/*   Query 2:   */
+
 SELECT s.store_id     "Store ID",  
 	sum(amount)		  "Gross Revenue"
 FROM store  s
@@ -231,21 +263,27 @@ INNER JOIN staff 	on s.store_id = staff.store_id
 INNER JOIN payment p   on staff.staff_id = p.staff_id
 GROUP BY s.store_id;
 
-/* note:  I believe this is the best query.  However, this should also work:  */
+/*   Query 3:   */
+
 SELECT s.store_id     "Store ID",  
 	sum(amount)		  "Gross Revenue"
-FROM store  s
-INNER JOIN inventory i 	on s.store_id = i.store_id
-INNER JOIN rental r     on i.inventory_id = r.inventory_id
-INNER JOIN payment p    on r.rental_id = p.rental_id
-GROUP BY s.store_id;
-/*  but it varies from the above because of data issues:
-	rental_id is missing on 5 payment records, and staff_id is not consistent across
-    payment and rental records (apparently, the company allows returns (and payments)
-    to be made to a different store that the one rented from).  Come to think of it
-    I don't think I know for sure whether business should be attributed to the store
-    that rents out the movie or the one that accepts payment.    					*/
-
+	FROM store  s
+	INNER JOIN staff 		on s.store_id = staff.store_id
+    INNER JOIN rental r		on staff.staff_id = r.staff_id
+	RIGHT JOIN payment p    on r.rental_id = p.rental_id
+	GROUP BY s.store_id;
+    
+/*  First, the payment table is missing rental_id on five records (hence the need for a RIGHT JOIN).
+	Second, the staff_id is not consistent between the payment table and the rental table
+    for the same rental_id.  The contents and structure of the staff table implies that each
+    staff member works at a single and different store - perhaps the company allows returns/payments
+    at a different store than the one rented at?  If so, should the revenue be attributed to the
+    store rented from or the store receiving payment?  And store_id (via inventory) is not consistent
+    with either one.  Maybe instead, a staff member is primarily associated with one store but
+    may be asked to fill in at another.  That would make paths through the staff table useless 
+    for this purpose, so ultimately I am choosing query 1 as the most likely to be correct, 
+    even if 9.95 worth of business remains unaccounted for by store.					*/
+    
 -- 7g. Write a query to display for each store its store ID, city, and country.
 
 SELECT store_id, city, country
